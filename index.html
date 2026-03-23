@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wedding Seating Chart</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f5f0eb;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Toolbar ── */
+#toolbar {
+  background: #fff;
+  border-bottom: 1px solid #e0d6cc;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-right: 10px;
+  border-right: 1px solid #e8e0d8;
+}
+.toolbar-group:last-child { border-right: none; }
+
+.group-label {
+  font-size: 11px;
+  color: #aaa;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 2px;
+}
+
+button {
+  padding: 5px 11px;
+  border: 1px solid #d8d0c8;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  color: #444;
+  transition: background 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+button:hover { background: #f8f4f0; border-color: #b8b0a8; }
+button:disabled { opacity: 0.4; cursor: default; }
+button:disabled:hover { background: #fff; border-color: #d8d0c8; }
+
+button.btn-delete { color: #c04040; border-color: #e8b0b0; }
+button.btn-delete:hover { background: #fff5f5; }
+
+.hint {
+  font-size: 11px;
+  color: #bbb;
+  margin-left: 4px;
+  user-select: none;
+}
+
+/* ── Canvas wrapper ── */
+#canvas-wrapper {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+}
+
+#canvas {
+  width: 1400px;
+  height: 900px;
+  background: #fdfaf7;
+  background-image:
+    linear-gradient(rgba(180,160,140,0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(180,160,140,0.15) 1px, transparent 1px);
+  background-size: 40px 40px;
+  position: relative;
+  border: 2px solid #ddd4c8;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+/* ── Table group ── */
+.table-group {
+  position: absolute;
+  cursor: grab;
+  user-select: none;
+}
+.table-group.dragging { cursor: grabbing; opacity: 0.9; z-index: 100; }
+.table-group.selected .table-shape { outline: 2px dashed #5a9080; outline-offset: 4px; }
+
+/* ── Table shape ── */
+.table-shape {
+  position: absolute;
+  background: #ede4d8;
+  border: 2px solid #c0a888;
+}
+.table-shape.circle { border-radius: 50%; }
+.table-shape.rect   { border-radius: 7px; }
+
+.table-name {
+  position: absolute;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #786050;
+  pointer-events: none;
+  white-space: nowrap;
+  width: 100%;
+  letter-spacing: 0.3px;
+}
+
+/* ── Chair ── */
+.chair {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.chair-body {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ddd0be;
+  border: 2px solid #b09880;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: #887060;
+  transition: background 0.12s, border-color 0.12s;
+  overflow: hidden;
+}
+
+.chair:hover .chair-body {
+  background: #ccc0ae;
+  border-color: #9a8070;
+}
+
+.chair.assigned .chair-body {
+  background: #c8ddd4;
+  border-color: #7aaa96;
+  color: #3a6a5a;
+}
+
+.chair-tag {
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 8.5px;
+  color: #666;
+  white-space: nowrap;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  text-align: center;
+  background: rgba(255,255,255,0.85);
+  padding: 0 3px;
+  border-radius: 3px;
+  line-height: 14px;
+}
+
+/* ── Properties panel ── */
+#props-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #fff;
+  border: 1px solid #ddd4c8;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  width: 210px;
+  display: none;
+  z-index: 200;
+}
+#props-panel.visible { display: block; }
+
+#props-panel h3 {
+  font-size: 11px;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.prop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.prop-label { font-size: 12px; color: #666; }
+
+.prop-row input[type="text"] {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 12px;
+  color: #333;
+}
+.prop-row input[type="text"]:focus {
+  outline: none;
+  border-color: #8abcac;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stepper-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 5px;
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #ddd;
+}
+.stepper-val {
+  min-width: 22px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.prop-note {
+  font-size: 10px;
+  color: #bbb;
+  margin-top: 2px;
+  text-align: right;
+}
+
+/* ── Chair name popup ── */
+#name-popup {
+  position: fixed;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+  width: 185px;
+  display: none;
+  z-index: 300;
+}
+#name-popup.visible { display: block; }
+#name-popup label {
+  display: block;
+  font-size: 10px;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 5px;
+}
+#name-popup input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 13px;
+}
+#name-popup input:focus { outline: none; border-color: #8abcac; }
+#popup-clear {
+  margin-top: 5px;
+  background: none;
+  border: none;
+  color: #c05050;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+#popup-clear:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="toolbar-group">
+    <span class="group-label">Round</span>
+    <button onclick="addTable('circle','small')" title="Max 6 chairs">Small</button>
+    <button onclick="addTable('circle','medium')" title="Max 8 chairs">Medium</button>
+    <button onclick="addTable('circle','large')" title="Max 12 chairs">Large</button>
+  </div>
+  <div class="toolbar-group">
+    <span class="group-label">Rectangular</span>
+    <button onclick="addTable('rect','small')" title="Max 6 chairs">Small</button>
+    <button onclick="addTable('rect','medium')" title="Max 10 chairs">Medium</button>
+    <button onclick="addTable('rect','large')" title="Max 14 chairs">Large</button>
+  </div>
+  <div class="toolbar-group">
+    <button class="btn-delete" id="btn-delete" onclick="deleteSelected()" disabled>Delete Table</button>
+    <button onclick="clearAll()">Clear All</button>
+  </div>
+  <span class="hint">Click table to select · Drag to move · Click chair to name a guest</span>
+</div>
+
+<div id="canvas-wrapper">
+  <div id="canvas"></div>
+</div>
+
+<!-- Properties panel -->
+<div id="props-panel">
+  <h3>Table Settings</h3>
+  <div class="prop-row">
+    <input type="text" id="prop-name" placeholder="Table name…">
+  </div>
+  <div class="prop-row">
+    <span class="prop-label">Chairs</span>
+    <div class="stepper">
+      <button class="stepper-btn" onclick="adjustChairs(-1)">−</button>
+      <span class="stepper-val" id="prop-chair-count">4</span>
+      <button class="stepper-btn" onclick="adjustChairs(1)">+</button>
+    </div>
+  </div>
+  <div class="prop-note" id="prop-max-note">max 6</div>
+</div>
+
+<!-- Chair name popup -->
+<div id="name-popup">
+  <label>Guest Name</label>
+  <input type="text" id="popup-input" placeholder="Enter name…" autocomplete="off">
+  <button id="popup-clear" onclick="clearSeatName()">Remove name</button>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────
+const DEFS = {
+  circle: {
+    small:  { r: 48,  max: 6  },
+    medium: { r: 66,  max: 8  },
+    large:  { r: 88,  max: 12 },
+  },
+  rect: {
+    small:  { w: 120, h: 58,  max: 6  },
+    medium: { w: 200, h: 68,  max: 10 },
+    large:  { w: 280, h: 78,  max: 14 },
+  }
+};
+
+const CS   = 28;   // chair size px
+const GAP  = 11;   // gap between table edge and chair center
+const PAD  = CS + GAP + 20; // group padding so chairs don't clip
+
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+let tables        = [];
+let uid           = 1;
+let selectedId    = null;
+let activeSeat    = null;  // { tableId, seatIdx }
+let drag          = null;  // drag state
+
+const canvas      = document.getElementById('canvas');
+const propsPanel  = document.getElementById('props-panel');
+const namePopup   = document.getElementById('name-popup');
+const popupInput  = document.getElementById('popup-input');
+const propName    = document.getElementById('prop-name');
+const propCount   = document.getElementById('prop-chair-count');
+const propMax     = document.getElementById('prop-max-note');
+const btnDelete   = document.getElementById('btn-delete');
+
+// ─────────────────────────────────────────────
+// Geometry helpers
+// ─────────────────────────────────────────────
+function tableDims(t) {
+  const d = DEFS[t.type][t.size];
+  return t.type === 'circle'
+    ? { w: d.r * 2, h: d.r * 2 }
+    : { w: d.w, h: d.h };
+}
+
+// Returns array of {cx, cy} relative to table shape top-left
+function chairPositions(t) {
+  const d    = DEFS[t.type][t.size];
+  const n    = t.seats;
+  const pos  = [];
+
+  if (t.type === 'circle') {
+    const r   = d.r;
+    const dist = r + GAP + CS / 2;
+    for (let i = 0; i < n; i++) {
+      const a = (2 * Math.PI * i / n) - Math.PI / 2;
+      pos.push({ cx: r + dist * Math.cos(a), cy: r + dist * Math.sin(a) });
+    }
+  } else {
+    // Rectangle: top row + bottom row
+    const W = d.w, H = d.h;
+    const top = Math.ceil(n / 2);
+    const bot = Math.floor(n / 2);
+    const yTop = -(GAP + CS / 2);
+    const yBot = H + GAP + CS / 2;
+
+    for (let i = 0; i < top; i++) {
+      pos.push({ cx: W * (i + 1) / (top + 1), cy: yTop });
+    }
+    for (let i = 0; i < bot; i++) {
+      pos.push({ cx: W * (i + 1) / (bot + 1), cy: yBot });
+    }
+  }
+  return pos;
+}
+
+// ─────────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────────
+function render(t) {
+  const existing = document.getElementById(`tg-${t.id}`);
+  if (existing) existing.remove();
+
+  const { w, h } = tableDims(t);
+  const group = document.createElement('div');
+  group.id        = `tg-${t.id}`;
+  group.className = 'table-group' + (selectedId === t.id ? ' selected' : '');
+  group.style.left   = `${t.x - PAD}px`;
+  group.style.top    = `${t.y - PAD}px`;
+  group.style.width  = `${w + PAD * 2}px`;
+  group.style.height = `${h + PAD * 2}px`;
+
+  // Table shape
+  const shape = document.createElement('div');
+  shape.className = `table-shape ${t.type}`;
+  shape.style.left   = `${PAD}px`;
+  shape.style.top    = `${PAD}px`;
+  shape.style.width  = `${w}px`;
+  shape.style.height = `${h}px`;
+  group.appendChild(shape);
+
+  // Table name label
+  const lbl = document.createElement('div');
+  lbl.className   = 'table-name';
+  lbl.textContent = t.name;
+  lbl.style.left  = `${PAD}px`;
+  lbl.style.top   = `${PAD + h / 2 - 6}px`;
+  lbl.style.width = `${w}px`;
+  group.appendChild(lbl);
+
+  // Chairs
+  const cpos = chairPositions(t);
+  cpos.forEach((p, i) => {
+    const guest = t.guests[i] || '';
+    const initials = guest
+      ? guest.trim().split(/\s+/).map(x => x[0]).join('').toUpperCase().slice(0, 2)
+      : String(i + 1);
+
+    const chair = document.createElement('div');
+    chair.className = 'chair' + (guest ? ' assigned' : '');
+    chair.title     = guest || `Seat ${i + 1}`;
+    chair.style.left = `${PAD + p.cx - CS / 2}px`;
+    chair.style.top  = `${PAD + p.cy - CS / 2}px`;
+
+    const body = document.createElement('div');
+    body.className   = 'chair-body';
+    body.textContent = initials;
+    chair.appendChild(body);
+
+    if (guest) {
+      const tag = document.createElement('div');
+      tag.className   = 'chair-tag';
+      tag.textContent = guest.split(' ')[0]; // first name only in tag
+      chair.appendChild(tag);
+    }
+
+    chair.addEventListener('mousedown', e => e.stopPropagation());
+    chair.addEventListener('click',     e => { e.stopPropagation(); openNamePopup(t.id, i, chair); });
+    group.appendChild(chair);
+  });
+
+  // Drag on group
+  group.addEventListener('mousedown', e => {
+    if (e.target.closest('.chair')) return;
+    e.preventDefault();
+    closeNamePopup();
+    selectTable(t.id);
+    drag = {
+      id: t.id,
+      startMX: e.clientX,
+      startMY: e.clientY,
+      startTX: t.x,
+      startTY: t.y,
+    };
+    group.classList.add('dragging');
+  });
+
+  group.addEventListener('click', e => {
+    if (e.target.closest('.chair')) return;
+    selectTable(t.id);
+  });
+
+  canvas.appendChild(group);
+}
+
+function renderAll() {
+  canvas.querySelectorAll('.table-group').forEach(el => el.remove());
+  tables.forEach(render);
+}
+
+// ─────────────────────────────────────────────
+// Selection
+// ─────────────────────────────────────────────
+function selectTable(id) {
+  selectedId = id;
+  document.querySelectorAll('.table-group').forEach(el => el.classList.remove('selected'));
+  document.getElementById(`tg-${id}`)?.classList.add('selected');
+
+  const t = tables.find(x => x.id === id);
+  if (!t) return;
+
+  propName.value   = t.name;
+  propCount.textContent = t.seats;
+  propMax.textContent   = `max ${DEFS[t.type][t.size].max}`;
+  propsPanel.classList.add('visible');
+  btnDelete.disabled = false;
+}
+
+function deselect() {
+  selectedId = null;
+  document.querySelectorAll('.table-group').forEach(el => el.classList.remove('selected'));
+  propsPanel.classList.remove('visible');
+  btnDelete.disabled = true;
+}
+
+// ─────────────────────────────────────────────
+// Add / delete
+// ─────────────────────────────────────────────
+function addTable(type, size) {
+  const d   = DEFS[type][size];
+  const def = Math.min(4, d.max);
+  const t   = {
+    id:     uid++,
+    type,
+    size,
+    x:      120 + Math.random() * 500,
+    y:      120 + Math.random() * 400,
+    name:   `Table ${uid - 1}`,
+    seats:  def,
+    guests: Array(d.max).fill(''),
+  };
+  tables.push(t);
+  render(t);
+  selectTable(t.id);
+}
+
+function deleteSelected() {
+  if (!selectedId) return;
+  document.getElementById(`tg-${selectedId}`)?.remove();
+  tables = tables.filter(t => t.id !== selectedId);
+  deselect();
+  closeNamePopup();
+}
+
+function clearAll() {
+  if (tables.length && !confirm('Remove all tables and seating assignments?')) return;
+  tables = [];
+  canvas.querySelectorAll('.table-group').forEach(el => el.remove());
+  deselect();
+  closeNamePopup();
+}
+
+// ─────────────────────────────────────────────
+// Properties panel
+// ─────────────────────────────────────────────
+propName.addEventListener('input', () => {
+  const t = tables.find(x => x.id === selectedId);
+  if (!t) return;
+  t.name = propName.value;
+  // just update the label, no need to re-render everything
+  const lbl = document.querySelector(`#tg-${t.id} .table-name`);
+  if (lbl) lbl.textContent = t.name;
+});
+
+propName.addEventListener('mousedown', e => e.stopPropagation());
+
+function adjustChairs(delta) {
+  const t = tables.find(x => x.id === selectedId);
+  if (!t) return;
+  const max = DEFS[t.type][t.size].max;
+  const next = Math.max(1, Math.min(max, t.seats + delta));
+  if (next === t.seats) return;
+  t.seats = next;
+  propCount.textContent = next;
+  render(t);
+  selectTable(t.id);
+}
+
+// ─────────────────────────────────────────────
+// Chair name popup
+// ─────────────────────────────────────────────
+function openNamePopup(tableId, seatIdx, chairEl) {
+  activeSeat = { tableId, seatIdx };
+  const t    = tables.find(x => x.id === tableId);
+  popupInput.value = t ? (t.guests[seatIdx] || '') : '';
+
+  const cr = chairEl.getBoundingClientRect();
+  let left = cr.right + 8;
+  let top  = cr.top - 4;
+  if (left + 190 > window.innerWidth)  left = cr.left - 198;
+  if (top  + 90  > window.innerHeight) top  = window.innerHeight - 94;
+  namePopup.style.left = `${left}px`;
+  namePopup.style.top  = `${top}px`;
+  namePopup.classList.add('visible');
+  setTimeout(() => { popupInput.focus(); popupInput.select(); }, 10);
+}
+
+function closeNamePopup() {
+  namePopup.classList.remove('visible');
+  activeSeat = null;
+}
+
+function clearSeatName() {
+  popupInput.value = '';
+  commitName('');
+}
+
+function commitName(name) {
+  if (!activeSeat) return;
+  const t = tables.find(x => x.id === activeSeat.tableId);
+  if (!t) return;
+  t.guests[activeSeat.seatIdx] = name;
+  render(t);
+  if (selectedId === t.id) selectTable(t.id);
+}
+
+popupInput.addEventListener('input',   () => commitName(popupInput.value));
+popupInput.addEventListener('mousedown', e => e.stopPropagation());
+popupInput.addEventListener('keydown',  e => {
+  if (e.key === 'Enter' || e.key === 'Escape') closeNamePopup();
+});
+
+// ─────────────────────────────────────────────
+// Drag
+// ─────────────────────────────────────────────
+document.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const t = tables.find(x => x.id === drag.id);
+  if (!t) return;
+
+  const { w, h } = tableDims(t);
+  const dx = e.clientX - drag.startMX;
+  const dy = e.clientY - drag.startMY;
+  t.x = Math.max(PAD, Math.min(canvas.offsetWidth  - w - PAD, drag.startTX + dx));
+  t.y = Math.max(PAD, Math.min(canvas.offsetHeight - h - PAD, drag.startTY + dy));
+
+  const grp = document.getElementById(`tg-${t.id}`);
+  if (grp) {
+    grp.style.left = `${t.x - PAD}px`;
+    grp.style.top  = `${t.y - PAD}px`;
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  if (drag) {
+    document.querySelector(`#tg-${drag.id}`)?.classList.remove('dragging');
+    drag = null;
+  }
+});
+
+// Click on empty canvas = deselect
+canvas.addEventListener('click', e => {
+  if (e.target === canvas) { deselect(); closeNamePopup(); }
+});
+
+// Click outside popup = close popup
+document.addEventListener('click', e => {
+  if (namePopup.classList.contains('visible') &&
+      !namePopup.contains(e.target) &&
+      !e.target.closest('.chair')) {
+    closeNamePopup();
+  }
+});
+</script>
+</body>
+</html>
