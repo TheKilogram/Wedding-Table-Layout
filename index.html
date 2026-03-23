@@ -110,8 +110,14 @@ button.btn-delete:hover { background: #fff5f5; }
   background: #ede4d8;
   border: 2px solid #c0a888;
 }
-.table-shape.circle { border-radius: 50%; }
-.table-shape.rect   { border-radius: 7px; }
+.table-shape.circle  { border-radius: 50%; }
+.table-shape.rect    { border-radius: 7px; }
+.table-shape.bridal  { border-radius: 7px; background: #e8ddf0; border-color: #b09ac8; }
+
+.rotate-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.rotate-row.hidden { display: none; }
+.rotate-btns { display: flex; gap: 4px; }
+.rotate-btns button { padding: 4px 8px; font-size: 13px; }
 
 .table-name {
   position: absolute;
@@ -314,6 +320,11 @@ button.btn-delete:hover { background: #fff5f5; }
     <button onclick="addTable('rect','large')" title="Max 14 chairs">Large</button>
   </div>
   <div class="toolbar-group">
+    <span class="group-label">Bridal</span>
+    <button onclick="addTable('bridal','couple')" title="2 chairs, one side — B&amp;G table">Couple</button>
+    <button onclick="addTable('bridal','head')" title="Up to 10 chairs, one side — head table">Head Table</button>
+  </div>
+  <div class="toolbar-group">
     <button class="btn-delete" id="btn-delete" onclick="deleteSelected()" disabled>Delete Table</button>
     <button onclick="clearAll()">Clear All</button>
   </div>
@@ -350,6 +361,13 @@ button.btn-delete:hover { background: #fff5f5; }
     </div>
   </div>
   <div class="prop-note" id="prop-max-note">max 6</div>
+  <div class="rotate-row hidden" id="rotate-row">
+    <span class="prop-label">Rotate</span>
+    <div class="rotate-btns">
+      <button onclick="rotateTable(-45)" title="Rotate 45° left">↺ 45°</button>
+      <button onclick="rotateTable(45)"  title="Rotate 45° right">↻ 45°</button>
+    </div>
+  </div>
 </div>
 
 <!-- Chair name popup -->
@@ -373,6 +391,10 @@ const DEFS = {
     small:  { w: 120, h: 58,  max: 6  },
     medium: { w: 200, h: 68,  max: 10 },
     large:  { w: 280, h: 78,  max: 14 },
+  },
+  bridal: {
+    couple: { w: 160, h: 58, max: 2  },  // bride & groom only
+    head:   { w: 360, h: 58, max: 10 },  // head table with family
   }
 };
 
@@ -405,35 +427,42 @@ function tableDims(t) {
   const d = DEFS[t.type][t.size];
   return t.type === 'circle'
     ? { w: d.r * 2, h: d.r * 2 }
-    : { w: d.w, h: d.h };
+    : { w: d.w,     h: d.h     };
+}
+
+function tableMax(t) {
+  return DEFS[t.type][t.size].max;
 }
 
 // Returns array of {cx, cy} relative to table shape top-left
 function chairPositions(t) {
-  const d    = DEFS[t.type][t.size];
-  const n    = t.seats;
-  const pos  = [];
+  const d   = DEFS[t.type][t.size];
+  const n   = t.seats;
+  const pos = [];
 
   if (t.type === 'circle') {
-    const r   = d.r;
+    const r    = d.r;
     const dist = r + GAP + CS / 2;
     for (let i = 0; i < n; i++) {
       const a = (2 * Math.PI * i / n) - Math.PI / 2;
       pos.push({ cx: r + dist * Math.cos(a), cy: r + dist * Math.sin(a) });
     }
+  } else if (t.type === 'bridal') {
+    // All chairs on the front (bottom) side only
+    const W = d.w, H = d.h;
+    for (let i = 0; i < n; i++) {
+      pos.push({ cx: W * (i + 1) / (n + 1), cy: H + GAP + CS / 2 });
+    }
   } else {
-    // Rectangle: top row + bottom row
+    // rect: top row + bottom row
     const W = d.w, H = d.h;
     const top = Math.ceil(n / 2);
     const bot = Math.floor(n / 2);
-    const yTop = -(GAP + CS / 2);
-    const yBot = H + GAP + CS / 2;
-
     for (let i = 0; i < top; i++) {
-      pos.push({ cx: W * (i + 1) / (top + 1), cy: yTop });
+      pos.push({ cx: W * (i + 1) / (top + 1), cy: -(GAP + CS / 2) });
     }
     for (let i = 0; i < bot; i++) {
-      pos.push({ cx: W * (i + 1) / (bot + 1), cy: yBot });
+      pos.push({ cx: W * (i + 1) / (bot + 1), cy: H + GAP + CS / 2 });
     }
   }
   return pos;
@@ -455,9 +484,16 @@ function render(t) {
   group.style.width  = `${w + PAD * 2}px`;
   group.style.height = `${h + PAD * 2}px`;
 
-  // Table shape
+  // Rotation (rect and bridal only)
+  if (t.rotation) {
+    group.style.transform       = `rotate(${t.rotation}deg)`;
+    group.style.transformOrigin = 'center';
+  }
+
+  // Table shape  (bridal reuses rect border-radius but different colour via CSS class)
   const shape = document.createElement('div');
-  shape.className = `table-shape ${t.type}`;
+  const shapeClass = t.type === 'bridal' ? 'bridal' : t.type;
+  shape.className = `table-shape ${shapeClass}`;
   shape.style.left   = `${PAD}px`;
   shape.style.top    = `${PAD}px`;
   shape.style.width  = `${w}px`;
@@ -544,9 +580,14 @@ function selectTable(id) {
   const t = tables.find(x => x.id === id);
   if (!t) return;
 
-  propName.value   = t.name;
+  propName.value        = t.name;
   propCount.textContent = t.seats;
-  propMax.textContent   = `max ${DEFS[t.type][t.size].max}`;
+  propMax.textContent   = `max ${tableMax(t)}`;
+
+  // Show rotate controls for rect and bridal tables only
+  const rotRow = document.getElementById('rotate-row');
+  rotRow.classList.toggle('hidden', t.type === 'circle');
+
   propsPanel.classList.add('visible');
   btnDelete.disabled = false;
 }
@@ -562,17 +603,21 @@ function deselect() {
 // Add / delete
 // ─────────────────────────────────────────────
 function addTable(type, size) {
-  const d   = DEFS[type][size];
-  const def = Math.min(4, d.max);
-  const t   = {
-    id:     uid++,
+  const d        = DEFS[type][size];
+  const defSeats = type === 'bridal' ? d.max : Math.min(4, d.max);
+  const defName  = type === 'bridal'
+    ? (size === 'couple' ? 'Bride & Groom' : 'Head Table')
+    : `Table ${uid}`;
+  const t = {
+    id:       uid++,
     type,
     size,
-    x:      120 + Math.random() * 500,
-    y:      120 + Math.random() * 400,
-    name:   `Table ${uid - 1}`,
-    seats:  def,
-    guests: Array(d.max).fill(''),
+    x:        120 + Math.random() * 500,
+    y:        120 + Math.random() * 400,
+    name:     defName,
+    seats:    defSeats,
+    rotation: 0,
+    guests:   Array(d.max).fill(''),
   };
   tables.push(t);
   render(t);
@@ -609,10 +654,18 @@ propName.addEventListener('input', () => {
 
 propName.addEventListener('mousedown', e => e.stopPropagation());
 
+function rotateTable(deg) {
+  const t = tables.find(x => x.id === selectedId);
+  if (!t) return;
+  t.rotation = ((t.rotation || 0) + deg + 360) % 360;
+  render(t);
+  selectTable(t.id);
+}
+
 function adjustChairs(delta) {
   const t = tables.find(x => x.id === selectedId);
   if (!t) return;
-  const max = DEFS[t.type][t.size].max;
+  const max  = tableMax(t);
   const next = Math.max(1, Math.min(max, t.seats + delta));
   if (next === t.seats) return;
   t.seats = next;
